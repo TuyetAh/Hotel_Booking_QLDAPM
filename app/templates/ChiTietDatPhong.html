@@ -1,0 +1,58 @@
+{% extends 'layout/base.html' %}
+
+{% block title %}Chi tiết khách sạn{% endblock %}
+
+{% block content %}
+<section class="hotel-detail-section">
+    <div class="container">
+        <div class="hotel-detail-box">
+            <h1>{{ data.hotel.TenKhachSan }}</h1>
+
+            <p><strong>Thành phố:</strong> {{ data.hotel.ThanhPho }}</p>
+            <p><strong>Địa chỉ:</strong> {{ data.hotel.DiaChi }}</p>
+            <p><strong>Vị trí nổi bật:</strong> {{ data.hotel.ViTriNoiBat if data.hotel.ViTriNoiBat else 'Đang cập nhật' }}</p>
+            <p><strong>SĐT liên hệ:</strong> {{ data.hotel.SoDienThoaiLienHe }}</p>
+            <p><strong>Mô tả:</strong> {{ data.hotel.MoTa if data.hotel.MoTa else 'Chưa có mô tả' }}</p>
+            <p><strong>Quy định:</strong> {{ data.hotel.QuyDinhKhachSan if data.hotel.QuyDinhKhachSan else 'Chưa có thông tin' }}</p>
+            <p><strong>Chính sách hủy:</strong> {{ data.hotel.ChinhSachHuy }}</p>
+            <p><strong>Điểm đánh giá trung bình:</strong> {{ data.hotel.DiemDanhGiaTrungBinh }}</p>
+        </div>
+
+        <div class="room-section">
+            <h2>Loại phòng</h2>
+
+            {% if data.room_types %}
+                <div class="room-list">
+                    {% for room in data.room_types %}
+                        <div class="room-card">
+                            <h3>{{ room.TenLoaiPhong }}</h3>
+                            <p><strong>Mô tả:</strong> {{ room.MoTa if room.MoTa else 'Chưa có mô tả' }}</p>
+                            <p><strong>Giá mỗi đêm:</strong> {{ room.GiaMoiDem }} VNĐ</p>
+                            <p><strong>Số người tối đa:</strong> {{ room.SoNguoiToiDa }}</p>
+                            <p><strong>Số lượng phòng:</strong> {{ room.SoLuongPhong }}</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p>Khách sạn này hiện chưa có loại phòng nào.</p>
+            {% endif %}
+        </div>
+
+        <div class="review-section">
+            <h2>Đánh giá</h2>
+
+            {% if data.reviews %}
+                {% for review in data.reviews %}
+                    <div class="review-card">
+                        <p><strong>Số sao:</strong> {{ review.SoSao }}/5</p>
+                        <p><strong>Bình luận:</strong> {{ review.BinhLuan if review.BinhLuan else 'Không có bình luận' }}</p>
+                        <p><strong>Ngày đánh giá:</strong> {{ review.NgayDanhGia }}</p>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>Khách sạn này chưa có đánh giá nào.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

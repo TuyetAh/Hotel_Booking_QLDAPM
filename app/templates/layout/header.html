@@ -1,0 +1,26 @@
+<header class="topbar">
+    <div class="container topbar-inner">
+        <div class="logo">
+            <a href="{{ url_for('index') }}">HOTEL BOOKING</a>
+        </div>
+
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}">Lưu trú</a>
+            <a href="#">Điểm đến</a>
+            <a href="#">Ưu đãi</a>
+            <a href="#">Hỗ trợ</a>
+        </nav>
+
+        <div class="topbar-actions">
+
+
+            {% if current_user %}
+                <a href="#" class="top-link">Xin chào, {{ current_user.HoTen }}</a>
+                <a href="{{ url_for('dang_xuat') }}" class="btn-outline">Đăng xuất</a>
+            {% else %}
+                <a href="#" class="top-link">Đăng chỗ nghỉ của bạn</a>
+                <a href="{{ url_for('dang_nhap') }}" class="btn-dark">Đăng nhập</a>
+            {% endif %}
+        </div>
+    </div>
+</header>
