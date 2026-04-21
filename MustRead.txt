@@ -1,3 +1,5 @@
 pip uninstall flask-admin -y
 pip install flask-admin==1.6.1
 downgrade de su dung boostrap3 on dinh hon
+De vao giao dien admin su dung link:
+http://localhost:5000/admin/
