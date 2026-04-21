@@ -10,7 +10,7 @@ def create_app():
 
     # Cấu hình chuỗi kết nối database SQL Server
     # sửa lại username, password, server cho đúng máy
-    app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:140522@localhost/datphongkhachsan?charset=utf8mb4"
+    app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:huuky123@localhost/datphongkhachsan"
 
 
     # Tắt cảnh báo không cần thiết
@@ -19,8 +19,11 @@ def create_app():
     # Gắn db vào app
     db.init_app(app)
 
+
     with app.app_context():
         # Import models để SQLAlchemy nhận diện các bảng
         from app import models
-
+        # Gắn Flask-Admin vào app
+        from app.admin import init_admin
+        init_admin(app)
     return app

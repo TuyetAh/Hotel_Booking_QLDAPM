@@ -247,26 +247,23 @@ def get_user_by_email(email):
 
 
 def check_login(username, password):
-    """
-    Kiểm tra đăng nhập.
-    Hỗ trợ cả mật khẩu hash và mật khẩu thường để test dữ liệu mẫu.
-    """
     user = NguoiDung.query.filter_by(TenDangNhap=username).first()
 
     if not user:
         return None
 
+    # Tài khoản bị khóa
     if user.TrangThaiHoatDong != 1:
         return None
 
-    # Trường hợp password đã hash
+    # Thử hash trước
     try:
         if check_password_hash(user.MatKhau, password):
             return user
     except Exception:
         pass
 
-    # Trường hợp dữ liệu mẫu đang là text thường
+    # Dữ liệu mẫu đang là text thường (123456)
     if user.MatKhau == password:
         return user
 
@@ -1147,3 +1144,55 @@ def get_featured_hotels(limit=None):
         return query.limit(limit).all()
 
     return query.all()
+
+#Chinhsua------------------------
+def update_user(user_id, ho_ten, so_dien_thoai, email, so_tai_khoan_ngan_hang):
+    user = get_user_by_id(user_id)
+    if not user:
+        return False, "Không tìm thấy người dùng"
+
+    # Kiểm tra email trùng với người khác
+    existing = NguoiDung.query.filter(
+        NguoiDung.Email == email,
+        NguoiDung.MaNguoiDung != user_id
+    ).first()
+    if existing:
+        return False, "Email đã được sử dụng bởi tài khoản khác"
+
+    user.HoTen = ho_ten
+    user.SoDienThoai = so_dien_thoai
+    user.Email = email
+    user.SoTaiKhoanNganHang = so_tai_khoan_ngan_hang
+    user.NgayCapNhat = datetime.now()
+
+    try:
+        db.session.commit()
+        return True, user
+    except Exception as e:
+        db.session.rollback()
+        return False, f"Lỗi: {str(e)}"
+
+
+def doi_mat_khau(user_id, mat_khau_cu, mat_khau_moi):
+    user = get_user_by_id(user_id)
+    if not user:
+        return False, "Không tìm thấy người dùng"
+
+    # Kiểm tra mật khẩu cũ
+    try:
+        if not check_password_hash(user.MatKhau, mat_khau_cu):
+            if user.MatKhau != mat_khau_cu:
+                return False, "Mật khẩu cũ không đúng"
+    except Exception:
+        if user.MatKhau != mat_khau_cu:
+            return False, "Mật khẩu cũ không đúng"
+
+    user.MatKhau = generate_password_hash(mat_khau_moi)
+    user.NgayCapNhat = datetime.now()
+
+    try:
+        db.session.commit()
+        return True, "Đổi mật khẩu thành công"
+    except Exception as e:
+        db.session.rollback()
+        return False, f"Lỗi: {str(e)}"

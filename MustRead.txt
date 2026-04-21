@@ -1,0 +1,3 @@
+pip uninstall flask-admin -y
+pip install flask-admin==1.6.1
+downgrade de su dung boostrap3 on dinh hon
