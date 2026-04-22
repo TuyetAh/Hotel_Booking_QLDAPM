@@ -6,6 +6,8 @@ from flask_admin.actions import action
 from flask import flash
 from sqlalchemy import func
 from app import db
+from wtforms import PasswordField
+from wtforms.validators import Optional, Length
 from app.models import (
     NguoiDung, ChuKhachSan, KhachSan,
     TienIch, LoaiPhong, DatPhong,
@@ -55,6 +57,8 @@ class DashboardView(AdminIndexView):
 # =========================================================
 # VIEWS
 # =========================================================
+
+
 class NguoiDungView(SecureModelView):
     column_list            = ["MaNguoiDung", "TenDangNhap", "HoTen", "Email", "SoDienThoai", "VaiTro", "TrangThaiHoatDong", "NgayTao"]
     column_searchable_list = ["TenDangNhap", "HoTen", "Email"]
@@ -64,14 +68,44 @@ class NguoiDungView(SecureModelView):
         "HoTen": "Họ tên", "Email": "Email", "SoDienThoai": "SĐT",
         "VaiTro": "Vai trò", "TrangThaiHoatDong": "Trạng thái", "NgayTao": "Ngày tạo"
     }
-    form_excluded_columns  = ["MatKhau", "dat_phongs", "danh_gias", "chu_khach_san"]
+    form_columns = [
+        "TenDangNhap", "HoTen", "SoDienThoai",
+        "Email", "SoTaiKhoanNganHang",
+        "VaiTro", "TrangThaiHoatDong",
+    ]
+    # [SỬA] Thêm field mật khẩu tùy chỉnh vào form
+    # Optional() khi edit (để trống = giữ nguyên), bắt buộc khi create xử lý trong on_model_change
+    form_extra_fields = {
+        "mat_khau_nhap": PasswordField("Mật khẩu", validators=[Optional(), Length(min=6, max=255)])
+    }
+    # Đặt thứ tự hiển thị, mat_khau_nhap nằm sau TenDangNhap
+    form_columns = [
+        "TenDangNhap", "mat_khau_nhap", "HoTen", "SoDienThoai",
+        "Email", "SoTaiKhoanNganHang",
+        "VaiTro", "TrangThaiHoatDong",
+    ]
+
+    def on_model_change(self, form, model, is_created):
+        from werkzeug.security import generate_password_hash
+        raw_password = form.mat_khau_nhap.data
+
+        if is_created:
+            # Tạo mới: bắt buộc phải có mật khẩu
+            if not raw_password:
+                from wtforms.validators import ValidationError
+                raise ValidationError("Mật khẩu không được để trống khi tạo mới.")
+            model.MatKhau = generate_password_hash(raw_password)
+        else:
+            # Chỉnh sửa: chỉ hash nếu admin có nhập mật khẩu mới
+            if raw_password:
+                model.MatKhau = generate_password_hash(raw_password)
+            # Nếu để trống thì giữ nguyên MatKhau cũ — không làm gì
+
     can_export = True
     page_size  = 20
 
 
-
 class KhachSanView(SecureModelView):
-    # Chỉ hiện KS đã duyệt (TrangThaiDuyet = 1)
     def get_query(self):
         return self.session.query(self.model).filter(
             self.model.TrangThaiDuyet == 1
@@ -92,12 +126,19 @@ class KhachSanView(SecureModelView):
         "TrangThaiDuyet": "Duyệt", "TrangThaiHoatDong": "Hoạt động",
         "DiemDanhGiaTrungBinh": "Điểm TB", "NgayTao": "Ngày tạo"
     }
-    form_excluded_columns = ["loai_phongs", "dat_phongs", "danh_gias",
-                              "chuyen_tien_khach_sans", "tien_ichs"]
+    # [SỬA] Thay form_excluded_columns bằng form_columns.
+    # Dùng "chu_khach_san" (relationship name) thay vì "MaChuKhachSan" (FK int)
+    # để Flask-Admin render dropdown chọn chủ khách sạn thay vì ô nhập số thô.
+    form_columns = [
+        "chu_khach_san",
+        "TenKhachSan", "ThanhPho", "DiaChi", "ViTriNoiBat",
+        "SoDienThoaiLienHe", "MoTa", "QuyDinhKhachSan",
+        "ChinhSachHuy", "ThuMucAnh",
+        "TrangThaiDuyet", "LyDoTuChoi", "TrangThaiHoatDong",
+    ]
     can_export = True
     page_size  = 20
 
-    # ← THÊM 2 ACTION NÀY
     @action("duyet", "✅ Duyệt", "Bạn có chắc muốn duyệt các khách sạn đã chọn?")
     def action_duyet(self, ids):
         try:
@@ -131,8 +172,8 @@ class KhachSanView(SecureModelView):
             db.session.rollback()
             flash(f"Lỗi: {str(e)}", "error")
 
+
 class KhachSanChoDuyetView(SecureModelView):
-    # Chỉ hiện KS chờ duyệt (TrangThaiDuyet = 0)
     def get_query(self):
         return self.session.query(self.model).filter(
             self.model.TrangThaiDuyet == 0
@@ -182,7 +223,6 @@ class KhachSanChoDuyetView(SecureModelView):
                 if hotel:
                     hotel.TrangThaiDuyet = 2
                     hotel.NgayDuyet = None
-                    # Lý do mặc định, admin có thể sửa sau trong edit
                     hotel.LyDoTuChoi = "Không đáp ứng yêu cầu của hệ thống"
                     count += 1
             db.session.commit()
@@ -191,8 +231,8 @@ class KhachSanChoDuyetView(SecureModelView):
             db.session.rollback()
             flash(f"Lỗi: {str(e)}", "error")
 
+
 class KhachSanTuChoiView(SecureModelView):
-    # Chỉ hiện KS đã từ chối (TrangThaiDuyet = 2)
     def get_query(self):
         return self.session.query(self.model).filter(
             self.model.TrangThaiDuyet == 2
@@ -211,12 +251,42 @@ class KhachSanTuChoiView(SecureModelView):
         "LyDoTuChoi": "Lý do từ chối", "NgayTao": "Ngày gửi"
     }
     can_create = False
-    can_edit   = False
     can_delete = False
     can_export = True
     page_size  = 20
+    # [SỬA] Xóa can_edit = False bị khai báo trùng rồi ghi đè bởi can_edit = True bên dưới.
+    # Giữ lại 1 lần duy nhất can_edit = True cho rõ ràng.
     can_edit = True
     form_columns = ["LyDoTuChoi"]
+
+
+# =========================================================
+# [MỚI] LoaiPhongView — tách riêng thay vì dùng SecureModelView trơn
+# Nguyên nhân lỗi gốc: SecureModelView không có form_columns nên
+# MaKhachSan (NOT NULL) bị bỏ qua → IntegrityError khi Create.
+# Dùng relationship name "khach_san" để Flask-Admin render dropdown.
+# =========================================================
+class LoaiPhongView(SecureModelView):
+    column_list = ["MaLoaiPhong", "khach_san", "TenLoaiPhong",
+                   "GiaMoiDem", "SoNguoiToiDa", "SoLuongPhong", "TrangThaiHoatDong"]
+    column_searchable_list = ["TenLoaiPhong"]
+    column_filters         = ["TrangThaiHoatDong", "khach_san"]
+    column_labels = {
+        "khach_san": "Khách sạn", "TenLoaiPhong": "Tên loại phòng",
+        "GiaMoiDem": "Giá/đêm", "SoNguoiToiDa": "Số người tối đa",
+        "SoLuongPhong": "Số lượng phòng", "TrangThaiHoatDong": "Trạng thái"
+    }
+    # [SỬA] Khai báo form_columns rõ ràng, dùng "khach_san" (relationship)
+    # để hiện dropdown thay vì để MaKhachSan bị null.
+    form_columns = [
+        "khach_san",
+        "TenLoaiPhong", "MoTa",
+        "GiaMoiDem", "SoNguoiToiDa", "SoLuongPhong",
+        "ThuMucAnh", "TrangThaiHoatDong",
+    ]
+    can_export = True
+    page_size  = 20
+
 
 class DatPhongView(SecureModelView):
     column_list            = ["MaDatPhong", "MaDatPhongCode", "nguoi_dung", "khach_san", "NgayNhanPhong", "NgayTraPhong", "TongTien", "TrangThaiDatPhong", "NgayTao"]
@@ -228,7 +298,17 @@ class DatPhongView(SecureModelView):
         "NgayTraPhong": "Trả phòng", "TongTien": "Tổng tiền",
         "TrangThaiDatPhong": "Trạng thái", "NgayTao": "Ngày đặt"
     }
-    form_excluded_columns  = ["chi_tiet_dat_phongs", "thanh_toan", "hoan_tien", "danh_gia", "chuyen_tien_khach_san"]
+    # [SỬA] Thay form_excluded_columns bằng form_columns.
+    # Dùng relationship names "nguoi_dung" và "khach_san" để hiện dropdown,
+    # tránh MaNguoiDung / MaKhachSan bị null khi admin tạo đặt phòng mới.
+    form_columns = [
+        "MaDatPhongCode",
+        "nguoi_dung",
+        "khach_san",
+        "NgayNhanPhong", "NgayTraPhong",
+        "SoNguoiLuuTru", "TongTien",
+        "TrangThaiDatPhong",
+    ]
     can_delete = False
     can_export = True
     page_size  = 20
@@ -242,6 +322,13 @@ class ThanhToanView(SecureModelView):
         "TrangThaiThanhToan": "Trạng thái", "SoTienThanhToan": "Số tiền",
         "ThoiGianThanhToan": "Thời gian"
     }
+    # [SỬA] Thêm form_columns: dùng "dat_phong" (relationship) để hiện dropdown
+    # đơn đặt phòng thay vì để MaDatPhong bị null khi tạo thanh toán mới.
+    form_columns = [
+        "dat_phong",
+        "PhuongThucThanhToan", "TrangThaiThanhToan",
+        "SoTienThanhToan", "MaGiaoDich", "ThoiGianThanhToan",
+    ]
     can_delete = False
     can_export = True
     page_size  = 20
@@ -255,6 +342,64 @@ class DanhGiaView(SecureModelView):
         "nguoi_dung": "Khách hàng", "khach_san": "Khách sạn",
         "SoSao": "Số sao", "BinhLuan": "Bình luận", "NgayDanhGia": "Ngày đánh giá"
     }
+    # [SỬA] Thêm form_columns: dùng relationship names để hiện dropdown,
+    # tránh MaNguoiDung / MaKhachSan / MaDatPhong bị null khi tạo đánh giá.
+    form_columns = [
+        "dat_phong",
+        "nguoi_dung",
+        "khach_san",
+        "SoSao", "BinhLuan",
+    ]
+    can_export = True
+    page_size  = 20
+
+
+# =========================================================
+# [MỚI] HoanTienView — tách riêng thay vì dùng SecureModelView trơn
+# để tránh MaDatPhong bị null khi tạo hoàn tiền mới.
+# =========================================================
+class HoanTienView(SecureModelView):
+    column_list = ["MaHoanTien", "dat_phong", "SoTienHoan",
+                   "LyDoHoanTien", "TrangThaiHoanTien", "ThoiGianHoanTien"]
+    column_labels = {
+        "dat_phong": "Đơn đặt", "SoTienHoan": "Số tiền hoàn",
+        "LyDoHoanTien": "Lý do", "TrangThaiHoanTien": "Trạng thái",
+        "ThoiGianHoanTien": "Thời gian"
+    }
+    # [SỬA] Khai báo form_columns với "dat_phong" relationship
+    # để hiện dropdown thay vì ô nhập MaDatPhong thô.
+    form_columns = [
+        "dat_phong",
+        "SoTienHoan", "LyDoHoanTien",
+        "TrangThaiHoanTien", "ThoiGianHoanTien",
+    ]
+    can_export = True
+    page_size  = 20
+
+
+# =========================================================
+# [MỚI] ChuyenTienView — tách riêng thay vì dùng SecureModelView trơn
+# để tránh MaDatPhong / MaKhachSan bị null khi tạo bản ghi mới.
+# =========================================================
+class ChuyenTienView(SecureModelView):
+    column_list = ["MaChuyenTien", "dat_phong", "khach_san",
+                   "TongTienDonHang", "PhiHeThong",
+                   "SoTienChuyenChoKhachSan", "TrangThaiChuyenTien", "ThoiGianChuyenTien"]
+    column_labels = {
+        "dat_phong": "Đơn đặt", "khach_san": "Khách sạn",
+        "TongTienDonHang": "Tổng đơn", "PhiHeThong": "Phí hệ thống",
+        "SoTienChuyenChoKhachSan": "Tiền chuyển KS",
+        "TrangThaiChuyenTien": "Trạng thái", "ThoiGianChuyenTien": "Thời gian"
+    }
+    # [SỬA] Khai báo form_columns với relationship names
+    # để hiện dropdown thay vì ô nhập FK thô.
+    form_columns = [
+        "dat_phong",
+        "khach_san",
+        "TongTienDonHang", "PhiHeThong",
+        "SoTienChuyenChoKhachSan",
+        "TrangThaiChuyenTien", "ThoiGianChuyenTien",
+    ]
     can_export = True
     page_size  = 20
 
@@ -283,13 +428,15 @@ def init_admin(app):
                                 name="🏨 Tất cả KS",
                                 endpoint="khachsan_tat_ca",
                                 category="Duyệt KS"))
-    admin.add_view(KhachSanView(KhachSan,     db.session, name="Khách sạn",   category="Quản lý"))
-    admin.add_view(SecureModelView(LoaiPhong, db.session, name="Loại phòng",  category="Quản lý"))
+    # [SỬA] Thay SecureModelView trơn bằng LoaiPhongView có form_columns đầy đủ
+    admin.add_view(LoaiPhongView(LoaiPhong,   db.session, name="Loại phòng",  category="Quản lý"))
     admin.add_view(DatPhongView(DatPhong,     db.session, name="Đặt phòng",   category="Quản lý"))
     admin.add_view(ThanhToanView(ThanhToan,   db.session, name="Thanh toán",  category="Quản lý"))
-    admin.add_view(SecureModelView(HoanTien,  db.session, name="Hoàn tiền",   category="Quản lý"))
+    # [SỬA] Thay SecureModelView trơn bằng HoanTienView
+    admin.add_view(HoanTienView(HoanTien,     db.session, name="Hoàn tiền",   category="Quản lý"))
     admin.add_view(DanhGiaView(DanhGia,       db.session, name="Đánh giá",    category="Quản lý"))
-    admin.add_view(SecureModelView(ChuyenTienKhachSan, db.session, name="Chuyển tiền", category="Quản lý"))
+    # [SỬA] Thay SecureModelView trơn bằng ChuyenTienView
+    admin.add_view(ChuyenTienView(ChuyenTienKhachSan, db.session, name="Chuyển tiền", category="Quản lý"))
     admin.add_view(SecureModelView(TienIch,   db.session, name="Tiện ích",    category="Cấu hình"))
 
     return admin
