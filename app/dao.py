@@ -1196,3 +1196,57 @@ def doi_mat_khau(user_id, mat_khau_cu, mat_khau_moi):
     except Exception as e:
         db.session.rollback()
         return False, f"Lỗi: {str(e)}"
+
+def get_hotels_by_owner(user_id):
+    """Lấy danh sách KS của chủ KS theo user_id."""
+    chu_ks = ChuKhachSan.query.filter_by(MaNguoiDung=user_id).first()
+    if not chu_ks:
+        return []
+    return KhachSan.query.filter_by(
+        MaChuKhachSan=chu_ks.MaChuKhachSan
+    ).order_by(KhachSan.NgayTao.desc()).all()
+
+def get_all_tien_ich_khach_san():
+    """Lấy tiện ích loại hotel."""
+    return TienIch.query.order_by(TienIch.TenTienIch.asc()).all()
+
+
+def create_hotel_full(user_id, ten_khach_san, thanh_pho, dia_chi,
+                      vi_tri_noi_bat, so_dien_thoai_lien_he, mo_ta,
+                      quy_dinh_khach_san, chinh_sach_huy, ds_tien_ich):
+    """Tạo khách sạn + gắn tiện ích."""
+    chu_ks = ChuKhachSan.query.filter_by(MaNguoiDung=user_id).first()
+    if not chu_ks:
+        return False, "Không tìm thấy thông tin chủ khách sạn"
+
+    new_hotel = KhachSan(
+        MaChuKhachSan=chu_ks.MaChuKhachSan,
+        TenKhachSan=ten_khach_san,
+        ThanhPho=thanh_pho,
+        DiaChi=dia_chi,
+        ViTriNoiBat=vi_tri_noi_bat,
+        SoDienThoaiLienHe=so_dien_thoai_lien_he,
+        MoTa=mo_ta,
+        QuyDinhKhachSan=quy_dinh_khach_san,
+        ChinhSachHuy=int(chinh_sach_huy),
+        TrangThaiDuyet=0,
+        TrangThaiHoatDong=1
+    )
+
+    try:
+        db.session.add(new_hotel)
+        db.session.flush()
+
+        # Gắn tiện ích
+        for ma_tien_ich in ds_tien_ich:
+            item = TienIchKhachSan(
+                MaKhachSan=new_hotel.MaKhachSan,
+                MaTienIch=int(ma_tien_ich)
+            )
+            db.session.add(item)
+
+        db.session.commit()
+        return True, new_hotel
+    except Exception as e:
+        db.session.rollback()
+        return False, f"Lỗi: {str(e)}"

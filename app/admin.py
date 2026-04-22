@@ -1,6 +1,9 @@
 from flask import session, redirect, url_for
+from datetime import datetime
 from flask_admin import Admin, AdminIndexView, expose
 from flask_admin.contrib.sqla import ModelView
+from flask_admin.actions import action
+from flask import flash
 from sqlalchemy import func
 from app import db
 from app.models import (
@@ -66,19 +69,154 @@ class NguoiDungView(SecureModelView):
     page_size  = 20
 
 
+
 class KhachSanView(SecureModelView):
-    column_list            = ["MaKhachSan", "TenKhachSan", "ThanhPho", "DiaChi", "TrangThaiDuyet", "TrangThaiHoatDong", "DiemDanhGiaTrungBinh", "NgayTao"]
+    # Chỉ hiện KS đã duyệt (TrangThaiDuyet = 1)
+    def get_query(self):
+        return self.session.query(self.model).filter(
+            self.model.TrangThaiDuyet == 1
+        )
+
+    def get_count_query(self):
+        return self.session.query(func.count('*')).filter(
+            self.model.TrangThaiDuyet == 1
+        )
+
+    column_list = ["MaKhachSan", "TenKhachSan", "ThanhPho", "DiaChi",
+                   "TrangThaiDuyet", "TrangThaiHoatDong",
+                   "DiemDanhGiaTrungBinh", "NgayTao"]
     column_searchable_list = ["TenKhachSan", "ThanhPho", "DiaChi"]
-    column_filters         = ["TrangThaiDuyet", "TrangThaiHoatDong", "ThanhPho"]
+    column_filters         = ["TrangThaiHoatDong", "ThanhPho"]
     column_labels          = {
         "MaKhachSan": "Mã", "TenKhachSan": "Tên KS", "ThanhPho": "Thành phố",
         "TrangThaiDuyet": "Duyệt", "TrangThaiHoatDong": "Hoạt động",
         "DiemDanhGiaTrungBinh": "Điểm TB", "NgayTao": "Ngày tạo"
     }
-    form_excluded_columns  = ["loai_phongs", "dat_phongs", "danh_gias", "chuyen_tien_khach_sans", "tien_ichs"]
+    form_excluded_columns = ["loai_phongs", "dat_phongs", "danh_gias",
+                              "chuyen_tien_khach_sans", "tien_ichs"]
     can_export = True
     page_size  = 20
 
+    # ← THÊM 2 ACTION NÀY
+    @action("duyet", "✅ Duyệt", "Bạn có chắc muốn duyệt các khách sạn đã chọn?")
+    def action_duyet(self, ids):
+        try:
+            count = 0
+            for id in ids:
+                hotel = KhachSan.query.get(id)
+                if hotel:
+                    hotel.TrangThaiDuyet = 1
+                    hotel.NgayDuyet = datetime.now()
+                    hotel.LyDoTuChoi = None
+                    count += 1
+            db.session.commit()
+            flash(f"Đã duyệt {count} khách sạn.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Lỗi: {str(e)}", "error")
+
+    @action("tu_choi", "❌ Từ chối", "Bạn có chắc muốn từ chối các khách sạn đã chọn?")
+    def action_tu_choi(self, ids):
+        try:
+            count = 0
+            for id in ids:
+                hotel = KhachSan.query.get(id)
+                if hotel:
+                    hotel.TrangThaiDuyet = 2
+                    hotel.NgayDuyet = None
+                    count += 1
+            db.session.commit()
+            flash(f"Đã từ chối {count} khách sạn.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Lỗi: {str(e)}", "error")
+
+class KhachSanChoDuyetView(SecureModelView):
+    # Chỉ hiện KS chờ duyệt (TrangThaiDuyet = 0)
+    def get_query(self):
+        return self.session.query(self.model).filter(
+            self.model.TrangThaiDuyet == 0
+        )
+
+    def get_count_query(self):
+        return self.session.query(func.count('*')).filter(
+            self.model.TrangThaiDuyet == 0
+        )
+
+    column_list = ["MaKhachSan", "TenKhachSan", "ThanhPho",
+                   "DiaChi", "SoDienThoaiLienHe", "NgayTao"]
+    column_labels = {
+        "MaKhachSan": "Mã", "TenKhachSan": "Tên KS",
+        "ThanhPho": "Thành phố", "DiaChi": "Địa chỉ",
+        "SoDienThoaiLienHe": "SĐT", "NgayTao": "Ngày gửi"
+    }
+    can_create = False
+    can_delete = False
+    can_edit   = False
+    can_export = True
+    page_size  = 20
+
+    @action("duyet", "✅ Duyệt", "Duyệt các khách sạn đã chọn?")
+    def action_duyet(self, ids):
+        try:
+            count = 0
+            for id in ids:
+                hotel = KhachSan.query.get(id)
+                if hotel:
+                    hotel.TrangThaiDuyet = 1
+                    hotel.NgayDuyet = datetime.now()
+                    hotel.LyDoTuChoi = None
+                    count += 1
+            db.session.commit()
+            flash(f"Đã duyệt {count} khách sạn.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Lỗi: {str(e)}", "error")
+
+    @action("tu_choi", "❌ Từ chối", "Từ chối các khách sạn đã chọn?")
+    def action_tu_choi(self, ids):
+        try:
+            count = 0
+            for id in ids:
+                hotel = KhachSan.query.get(id)
+                if hotel:
+                    hotel.TrangThaiDuyet = 2
+                    hotel.NgayDuyet = None
+                    # Lý do mặc định, admin có thể sửa sau trong edit
+                    hotel.LyDoTuChoi = "Không đáp ứng yêu cầu của hệ thống"
+                    count += 1
+            db.session.commit()
+            flash(f"Đã từ chối {count} khách sạn. Vào tab 'Đã từ chối' để cập nhật lý do.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Lỗi: {str(e)}", "error")
+
+class KhachSanTuChoiView(SecureModelView):
+    # Chỉ hiện KS đã từ chối (TrangThaiDuyet = 2)
+    def get_query(self):
+        return self.session.query(self.model).filter(
+            self.model.TrangThaiDuyet == 2
+        )
+
+    def get_count_query(self):
+        return self.session.query(func.count('*')).filter(
+            self.model.TrangThaiDuyet == 2
+        )
+
+    column_list = ["MaKhachSan", "TenKhachSan", "ThanhPho",
+                   "DiaChi", "LyDoTuChoi", "NgayTao"]
+    column_labels = {
+        "MaKhachSan": "Mã", "TenKhachSan": "Tên KS",
+        "ThanhPho": "Thành phố", "DiaChi": "Địa chỉ",
+        "LyDoTuChoi": "Lý do từ chối", "NgayTao": "Ngày gửi"
+    }
+    can_create = False
+    can_edit   = False
+    can_delete = False
+    can_export = True
+    page_size  = 20
+    can_edit = True
+    form_columns = ["LyDoTuChoi"]
 
 class DatPhongView(SecureModelView):
     column_list            = ["MaDatPhong", "MaDatPhongCode", "nguoi_dung", "khach_san", "NgayNhanPhong", "NgayTraPhong", "TongTien", "TrangThaiDatPhong", "NgayTao"]
@@ -133,6 +271,18 @@ def init_admin(app):
     )
 
     admin.add_view(NguoiDungView(NguoiDung,   db.session, name="Người dùng",  category="Quản lý"))
+    admin.add_view(KhachSanChoDuyetView(KhachSan, db.session,
+                                        name="⏳ Chờ duyệt",
+                                        endpoint="khachsan_cho_duyet",
+                                        category="Duyệt KS"))
+    admin.add_view(KhachSanTuChoiView(KhachSan, db.session,
+                                      name="❌ Đã từ chối",
+                                      endpoint="khachsan_tu_choi",
+                                      category="Duyệt KS"))
+    admin.add_view(KhachSanView(KhachSan, db.session,
+                                name="🏨 Tất cả KS",
+                                endpoint="khachsan_tat_ca",
+                                category="Duyệt KS"))
     admin.add_view(KhachSanView(KhachSan,     db.session, name="Khách sạn",   category="Quản lý"))
     admin.add_view(SecureModelView(LoaiPhong, db.session, name="Loại phòng",  category="Quản lý"))
     admin.add_view(DatPhongView(DatPhong,     db.session, name="Đặt phòng",   category="Quản lý"))
