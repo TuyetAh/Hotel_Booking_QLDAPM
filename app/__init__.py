@@ -10,7 +10,7 @@ def create_app():
 
     # Cấu hình chuỗi kết nối database SQL Server
     # sửa lại username, password, server cho đúng máy
-    app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:huuky123@localhost/datphongkhachsan"
+    app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:140522@localhost/datphongkhachsan?charset=utf8mb4"
 
 
     # Tắt cảnh báo không cần thiết

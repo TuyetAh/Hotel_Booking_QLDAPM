@@ -1,4 +1,5 @@
 import os
+from sqlalchemy import and_
 import shutil
 from datetime import datetime
 from decimal import Decimal
@@ -517,6 +518,8 @@ def get_hotel_detail_data(hotel_id):
         "trang_thai_hoat_dong_text": hien_thi_trang_thai_hoat_dong(hotel.TrangThaiHoatDong)
     }
     return data
+
+
 
 
 # =========================================================
@@ -1040,28 +1043,73 @@ def activate_hotel(hotel_id):
 # =========================================================
 
 
-def build_hotel_card_data(hotel):
-    """
-    Chuẩn bị dữ liệu 1 khách sạn để render ngoài trang chủ.
-    Đồng thời lấy ảnh đầu tiên và debug nếu không hiện ảnh.
+def build_hotel_card_data(hotel, checkin=None, checkout=None, so_nguoi_lon=None, so_phong=1):
+    """ếu có checkin/checkout thì giá hiển thị sẽ là giá thấp nhấttrong các loại phòng còn trống theo đúng khoảng ngày đang tìm.
     """
     if not hotel:
         return None
 
-    cover_image, image_error = lay_anh_dau_tien_va_loi(hotel.ThuMucAnh)
+    images = lay_danh_sach_anh(hotel.ThuMucAnh)
+    cover_image = images[0] if images else None
+
+    image_error = None if images else "Khách sạn chưa có ảnh"
+
+    checkin_date = None
+    checkout_date = None
+
+    try:
+        if checkin:
+            checkin_date = datetime.strptime(checkin, "%Y-%m-%d").date()
+        if checkout:
+            checkout_date = datetime.strptime(checkout, "%Y-%m-%d").date()
+    except Exception:
+        checkin_date = None
+        checkout_date = None
+
+    so_phong_can = int(so_phong) if so_phong not in (None, "",) else 1
+    so_nguoi_can = int(so_nguoi_lon) if so_nguoi_lon not in (None, "",) else None
+
+    # Nếu có ngày tìm kiếm thì lấy phòng còn trống thật sự
+    if checkin_date and checkout_date:
+        available_rooms_data = get_available_room_types_by_hotel(
+            hotel_id=hotel.MaKhachSan,
+            checkin=checkin_date,
+            checkout=checkout_date,
+            so_phong_can=so_phong_can,
+            so_nguoi_lon=so_nguoi_can
+        )
+        available_rooms = [item["room"] for item in available_rooms_data]
+    else:
+        # Nếu chưa có ngày thì lấy phòng đang hoạt động bình thường
+        available_rooms = [
+            room for room in hotel.loai_phongs
+            if room.TrangThaiHoatDong == 1
+        ]
+
+        if so_nguoi_can:
+            available_rooms = [
+                room for room in available_rooms
+                if room.SoNguoiToiDa >= so_nguoi_can
+            ]
+
+        available_rooms = [
+            room for room in available_rooms
+            if room.SoLuongPhong >= so_phong_can
+        ]
 
     min_price = None
-    active_rooms = [room for room in hotel.loai_phongs if room.TrangThaiHoatDong == 1]
-
-    if active_rooms:
-        min_price = min(room.GiaMoiDem for room in active_rooms)
+    if available_rooms:
+        min_price = min(room.GiaMoiDem for room in available_rooms)
 
     return {
         "hotel": hotel,
         "cover_image": cover_image,
+        "images": images,
         "image_error": image_error,
         "thu_muc_anh": hotel.ThuMucAnh,
         "min_price": min_price,
+        "available_rooms": available_rooms,
+        "available_room_count": len(available_rooms),
         "chinh_sach_huy_text": hien_thi_chinh_sach_huy(hotel.ChinhSachHuy),
         "trang_thai_duyet_text": hien_thi_trang_thai_duyet(hotel.TrangThaiDuyet),
         "trang_thai_hoat_dong_text": hien_thi_trang_thai_hoat_dong(hotel.TrangThaiHoatDong),
@@ -1129,12 +1177,12 @@ def get_featured_hotels(limit=None):
     Lấy khách sạn nổi bật:
     - đã duyệt
     - đang hoạt động
-    - điểm đánh giá > 9
+    - điểm đánh giá > 8.5
     """
     query = KhachSan.query.filter(
         KhachSan.TrangThaiDuyet == 1,
         KhachSan.TrangThaiHoatDong == 1,
-        KhachSan.DiemDanhGiaTrungBinh > 9
+        KhachSan.DiemDanhGiaTrungBinh > 8.5
     ).order_by(
         KhachSan.DiemDanhGiaTrungBinh.desc(),
         KhachSan.NgayTao.desc()
@@ -1250,3 +1298,234 @@ def create_hotel_full(user_id, ten_khach_san, thanh_pho, dia_chi,
     except Exception as e:
         db.session.rollback()
         return False, f"Lỗi: {str(e)}"
+
+from sqlalchemy import and_
+
+"""Dùng cho trang tìm kiếm và nút tìm kiếm ửo trnag chủ"""
+def get_all_amenities():
+    """
+    Lấy toàn bộ tiện ích để render bộ lọc.
+    """
+    return TienIch.query.order_by(TienIch.TenTienIch.asc()).all()
+
+
+def search_hotels_advanced(
+    keyword=None,
+    city=None,
+    checkin=None,
+    checkout=None,
+    so_nguoi_lon=None,
+    so_phong=None,
+    gia_tu=None,
+    gia_den=None,
+    so_sao=None,
+    tien_ich_ids=None,
+    chinh_sach_huy=None,
+    sort_by="goi_y",
+):
+    """
+    Tìm kiếm khách sạn nâng cao.
+
+    sort_by:
+        - goi_y
+        - gia_tang
+        - gia_giam
+        - diem_danh_gia
+        - moi_nhat
+    """
+    query = KhachSan.query.filter(
+        KhachSan.TrangThaiDuyet == 1,
+        KhachSan.TrangThaiHoatDong == 1
+    )
+
+    if keyword:
+        query = query.filter(
+            or_(
+                KhachSan.TenKhachSan.ilike(f"%{keyword}%"),
+                KhachSan.DiaChi.ilike(f"%{keyword}%"),
+                KhachSan.ViTriNoiBat.ilike(f"%{keyword}%"),
+                KhachSan.ThanhPho.ilike(f"%{keyword}%")
+            )
+        )
+
+    if city:
+        query = query.filter(KhachSan.ThanhPho.ilike(f"%{city}%"))
+
+    if chinh_sach_huy is not None and chinh_sach_huy != "":
+        query = query.filter(KhachSan.ChinhSachHuy == int(chinh_sach_huy))
+
+    # Lọc theo tiện ích khách sạn
+    if tien_ich_ids:
+        for ma_tien_ich in tien_ich_ids:
+            query = query.filter(
+                KhachSan.tien_ichs.any(TienIch.MaTienIch == int(ma_tien_ich))
+            )
+
+    hotels = query.all()
+
+    filtered_hotels = []
+
+    checkin_date = None
+    checkout_date = None
+
+    try:
+        if checkin:
+            checkin_date = datetime.strptime(checkin, "%Y-%m-%d").date()
+        if checkout:
+            checkout_date = datetime.strptime(checkout, "%Y-%m-%d").date()
+    except Exception:
+        checkin_date = None
+        checkout_date = None
+
+    so_phong_can = int(so_phong) if so_phong not in (None, "",) else 1
+    so_nguoi_can = int(so_nguoi_lon) if so_nguoi_lon not in (None, "",) else None
+
+    for hotel in hotels:
+        available_rooms_data = get_available_room_types_by_hotel(
+            hotel_id=hotel.MaKhachSan,
+            checkin=checkin_date,
+            checkout=checkout_date,
+            so_phong_can=so_phong_can,
+            so_nguoi_lon=so_nguoi_can
+        )
+
+        if not available_rooms_data:
+            continue
+
+        available_rooms = [item["room"] for item in available_rooms_data]
+
+        # Lọc theo giá dựa trên phòng còn trống
+        min_price = min(room.GiaMoiDem for room in available_rooms)
+
+        if gia_tu not in (None, ""):
+            if min_price < Decimal(str(gia_tu)):
+                continue
+
+        if gia_den not in (None, ""):
+            if min_price > Decimal(str(gia_den)):
+                continue
+
+        # Lọc theo mức đánh giá
+        if so_sao not in (None, ""):
+            so_sao_int = int(so_sao)
+            if so_sao_int == 5 and hotel.DiemDanhGiaTrungBinh < 9:
+                continue
+            elif so_sao_int == 4 and hotel.DiemDanhGiaTrungBinh < 8:
+                continue
+            elif so_sao_int == 3 and hotel.DiemDanhGiaTrungBinh < 7:
+                continue
+
+        filtered_hotels.append(hotel)
+
+    # Sắp xếp
+    if sort_by == "gia_tang":
+        filtered_hotels.sort(
+            key=lambda h: min([room.GiaMoiDem for room in h.loai_phongs if room.TrangThaiHoatDong == 1], default=999999999)
+        )
+    elif sort_by == "gia_giam":
+        filtered_hotels.sort(
+            key=lambda h: min([room.GiaMoiDem for room in h.loai_phongs if room.TrangThaiHoatDong == 1], default=0),
+            reverse=True
+        )
+    elif sort_by == "diem_danh_gia":
+        filtered_hotels.sort(key=lambda h: h.DiemDanhGiaTrungBinh, reverse=True)
+    elif sort_by == "moi_nhat":
+        filtered_hotels.sort(key=lambda h: h.NgayTao, reverse=True)
+    else:
+        # gợi ý
+        filtered_hotels.sort(
+            key=lambda h: (h.DiemDanhGiaTrungBinh, h.NgayTao),
+            reverse=True
+        )
+
+    return filtered_hotels
+
+
+def is_valid_booking_status_for_availability(trang_thai_dat_phong):
+    """
+    Những trạng thái vẫn giữ chỗ phòng.
+    0 = Chờ thanh toán
+    1 = Đã thanh toán
+
+    Không tính:
+    2 = Đã hủy
+    3 = Hoàn thành
+    """
+    return trang_thai_dat_phong in [0, 1]
+
+
+def kiem_tra_trung_ngay(ngay_nhan_phong_cu, ngay_tra_phong_cu, checkin_moi, checkout_moi):
+    """trả về true nếu 2 khoảng ngày bị trùng á"""
+    return ngay_nhan_phong_cu < checkout_moi and ngay_tra_phong_cu > checkin_moi
+
+
+def tinh_so_phong_da_dat(ma_loai_phong, checkin, checkout):
+    """chỉ tính các đơn còn giữ phòng:0 = chờ thanh toán va1 = dã thanh toán"""
+    if not checkin or not checkout:
+        return 0
+
+    chi_tiet_dat_phongs = ChiTietDatPhong.query.filter_by(MaLoaiPhong=ma_loai_phong).all()
+    tong_so_phong_da_dat = 0
+
+    for chi_tiet in chi_tiet_dat_phongs:
+        dat_phong = chi_tiet.dat_phong
+
+        if not dat_phong:
+            continue
+
+        # chỉ tính đơn còn giữ chỗ
+        if dat_phong.TrangThaiDatPhong not in [0, 1]:
+            continue
+
+        # nếu trùng lịch thì cộng vào
+        if kiem_tra_trung_ngay(
+            dat_phong.NgayNhanPhong,
+            dat_phong.NgayTraPhong,
+            checkin,
+            checkout
+        ):
+            tong_so_phong_da_dat += chi_tiet.SoLuongPhongDat
+
+    return tong_so_phong_da_dat
+
+
+def tinh_so_phong_con_trong(loai_phong, checkin, checkout):
+    """
+    số phòng còn trống = tổng số phòng - số phòng đã bị đặt trong khoảng ngày trùng nhau"""
+    if not loai_phong:
+        return 0
+
+    if not checkin or not checkout:
+        return loai_phong.SoLuongPhong
+
+    so_phong_da_dat = tinh_so_phong_da_dat(loai_phong.MaLoaiPhong, checkin, checkout)
+    so_phong_con_trong = loai_phong.SoLuongPhong - so_phong_da_dat
+
+    return max(0, so_phong_con_trong)
+
+
+def get_available_room_types_by_hotel(hotel_id, checkin=None, checkout=None, so_phong_can=1, so_nguoi_lon=None):
+    """
+    Lấy các loại phòng còn trống của khách sạn trong khoảng ngày.
+    """
+    room_types = LoaiPhong.query.filter_by(
+        MaKhachSan=hotel_id,
+        TrangThaiHoatDong=1
+    ).all()
+
+    available_rooms = []
+
+    for room in room_types:
+        # Lọc theo sức chứa
+        if so_nguoi_lon and room.SoNguoiToiDa < int(so_nguoi_lon):
+            continue
+
+        so_phong_con_trong = tinh_so_phong_con_trong(room, checkin, checkout)
+
+        if so_phong_con_trong >= int(so_phong_can):
+            available_rooms.append({
+                "room": room,
+                "so_phong_con_trong": so_phong_con_trong
+            })
+
+    return available_rooms
