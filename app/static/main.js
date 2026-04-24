@@ -246,3 +246,134 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 });
+// =========================
+// 5.slider ảnh loại phòng
+// =========================
+document.addEventListener("DOMContentLoaded", function () {
+    const roomSliders = document.querySelectorAll(".room-slider");
+
+    roomSliders.forEach((slider) => {
+        const images = slider.querySelectorAll(".room-slide-img");
+        const prevBtn = slider.querySelector(".room-prev");
+        const nextBtn = slider.querySelector(".room-next");
+        const currentText = slider.querySelector(".current-room-slide");
+
+        if (!images.length) return;
+
+        let currentIndex = 0;
+
+        function showImage(index) {
+            images.forEach((img) => img.classList.remove("active"));
+
+            if (index < 0) index = images.length - 1;
+            if (index >= images.length) index = 0;
+
+            currentIndex = index;
+            images[currentIndex].classList.add("active");
+
+            if (currentText) {
+                currentText.textContent = currentIndex + 1;
+            }
+        }
+
+        if (prevBtn) {
+            prevBtn.addEventListener("click", function () {
+                showImage(currentIndex - 1);
+            });
+        }
+
+        if (nextBtn) {
+            nextBtn.addEventListener("click", function () {
+                showImage(currentIndex + 1);
+            });
+        }
+
+        showImage(0);
+    });
+});
+// =========================
+//modal xem tất cả ảnh ks
+// =========================
+document.addEventListener("DOMContentLoaded", function () {
+    const openBtn = document.getElementById("openHotelGallery");
+    const closeBtn = document.getElementById("closePhotoViewer");
+    const viewer = document.getElementById("hotelPhotoViewer");
+
+    const mainImage = document.getElementById("photoViewerImage");
+    const titleText = document.getElementById("photoViewerTitle");
+    const counterText = document.getElementById("photoViewerCounter");
+
+    const prevBtn = document.getElementById("photoPrev");
+    const nextBtn = document.getElementById("photoNext");
+    const thumbs = document.querySelectorAll(".photo-thumb");
+
+    if (!openBtn || !closeBtn || !viewer || !mainImage || thumbs.length === 0) return;
+
+    let currentIndex = 0;
+
+    function showPhoto(index) {
+        if (index < 0) index = thumbs.length - 1;
+        if (index >= thumbs.length) index = 0;
+
+        currentIndex = index;
+
+        const thumb = thumbs[currentIndex];
+        const src = thumb.dataset.src;
+        const title = thumb.dataset.title;
+
+        mainImage.src = src;
+        titleText.textContent = title || "Hình khách sạn";
+        counterText.textContent = `${currentIndex + 1}/${thumbs.length}`;
+
+        thumbs.forEach(t => t.classList.remove("active"));
+        thumb.classList.add("active");
+
+        thumb.scrollIntoView({
+            behavior: "smooth",
+            inline: "center",
+            block: "nearest"
+        });
+    }
+
+    openBtn.addEventListener("click", function () {
+        viewer.classList.add("show");
+        document.body.style.overflow = "hidden";
+        showPhoto(0);
+    });
+
+    closeBtn.addEventListener("click", function () {
+        viewer.classList.remove("show");
+        document.body.style.overflow = "";
+    });
+
+    prevBtn.addEventListener("click", function () {
+        showPhoto(currentIndex - 1);
+    });
+
+    nextBtn.addEventListener("click", function () {
+        showPhoto(currentIndex + 1);
+    });
+
+    thumbs.forEach((thumb) => {
+        thumb.addEventListener("click", function () {
+            showPhoto(Number(this.dataset.index));
+        });
+    });
+
+    document.addEventListener("keydown", function (e) {
+        if (!viewer.classList.contains("show")) return;
+
+        if (e.key === "Escape") {
+            viewer.classList.remove("show");
+            document.body.style.overflow = "";
+        }
+
+        if (e.key === "ArrowLeft") {
+            showPhoto(currentIndex - 1);
+        }
+
+        if (e.key === "ArrowRight") {
+            showPhoto(currentIndex + 1);
+        }
+    });
+});

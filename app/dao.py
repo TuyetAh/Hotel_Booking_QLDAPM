@@ -498,26 +498,88 @@ def get_hotel_cover_image(hotel):
     return lay_anh_dau_tien(hotel.ThuMucAnh)
 
 
-def get_hotel_detail_data(hotel_id):
-    """
-    Gom dữ liệu chi tiết khách sạn.
-    """
+def get_hotel_detail_data(hotel_id, checkin=None, checkout=None, so_nguoi_lon=None, so_phong=1):
     hotel = get_hotel_by_id(hotel_id)
     if not hotel:
         return None
 
-    data = {
+    images = lay_danh_sach_anh(hotel.ThuMucAnh)
+
+    checkin_date = None
+    checkout_date = None
+
+    try:
+        if checkin:
+            checkin_date = datetime.strptime(checkin, "%Y-%m-%d").date()
+        if checkout:
+            checkout_date = datetime.strptime(checkout, "%Y-%m-%d").date()
+    except Exception:
+        checkin_date = None
+        checkout_date = None
+
+    so_phong_can = int(so_phong) if so_phong not in (None, "") else 1
+    so_nguoi_can = int(so_nguoi_lon) if so_nguoi_lon not in (None, "") else None
+
+    available_rooms_data = get_available_room_types_by_hotel(
+        hotel_id=hotel.MaKhachSan,
+        checkin=checkin_date,
+        checkout=checkout_date,
+        so_phong_can=so_phong_can,
+        so_nguoi_lon=so_nguoi_can
+    )
+
+    room_cards = []
+    all_images = []
+
+    # ảnh khách sạn
+    for img in images:
+        all_images.append({
+            "url": img,
+            "type": "Khách sạn",
+            "name": hotel.TenKhachSan
+        })
+
+    # ảnh loại phòng
+    for room_item in room_cards:
+        room = room_item["room"]
+        for img in room_item["images"]:
+            all_images.append({
+                "url": img,
+                "type": "Loại phòng",
+                "name": room.TenLoaiPhong
+            })
+
+    for item in available_rooms_data:
+        room = item["room"]
+        room_cards.append({
+            "room": room,
+            "so_phong_con_trong": item["so_phong_con_trong"],
+            "images": lay_danh_sach_anh(room.ThuMucAnh),
+            "cover_image": lay_anh_dau_tien(room.ThuMucAnh),
+            "tien_ichs": room.tien_ichs
+        })
+
+    min_price = None
+    if room_cards:
+        min_price = min(item["room"].GiaMoiDem for item in room_cards)
+
+    return {
         "hotel": hotel,
-        "hotel_images": get_hotel_images(hotel),
-        "hotel_cover": get_hotel_cover_image(hotel),
-        "room_types": get_room_types_by_hotel(hotel_id),
+        "images": images,
+        "all_images": all_images,
+        "cover_image": images[0] if images else None,
+        "room_cards": room_cards,
         "reviews": get_reviews_by_hotel(hotel_id),
+        "review_count": get_review_count_by_hotel(hotel_id),
         "tien_ichs": hotel.tien_ichs,
+        "min_price": min_price,
         "chinh_sach_huy_text": hien_thi_chinh_sach_huy(hotel.ChinhSachHuy),
-        "trang_thai_duyet_text": hien_thi_trang_thai_duyet(hotel.TrangThaiDuyet),
-        "trang_thai_hoat_dong_text": hien_thi_trang_thai_hoat_dong(hotel.TrangThaiHoatDong)
+        "checkin": checkin,
+        "checkout": checkout,
+        "so_nguoi_lon": so_nguoi_lon or 2,
+        "so_phong": so_phong or 1
     }
-    return data
+
 
 
 

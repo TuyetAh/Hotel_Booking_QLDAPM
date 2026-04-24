@@ -341,7 +341,13 @@
                                             {% endif %}
                                         </div>
 
-                                        <a href="{{ url_for('chi_tiet_khach_san', hotel_id=item.hotel.MaKhachSan) }}" class="btn-book-now">
+                                        <a href="{{ url_for('chi_tiet_khach_san',
+                                            hotel_id=item.hotel.MaKhachSan,
+                                            checkin=checkin,
+                                            checkout=checkout,
+                                            so_nguoi_lon=so_nguoi_lon,
+                                            so_phong=so_phong
+                                        ) }}" class="btn-book-now">
                                             Xem ngay
                                         </a>
                                     </div>
