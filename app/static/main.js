@@ -377,3 +377,105 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 });
+
+// =========================
+// Validate ngày (>= hôm nay & ở tối thiểu 1 đêm)
+// =========================
+document.addEventListener("DOMContentLoaded", function () {
+    const checkinInputs = document.querySelectorAll("input[name='checkin']");
+    const checkoutInputs = document.querySelectorAll("input[name='checkout']");
+
+    const today = new Date();
+    const formatDate = (date) => {
+        return date.toISOString().split("T")[0];
+    };
+
+    const todayStr = formatDate(today);
+
+    checkinInputs.forEach((checkinInput, index) => {
+        const checkoutInput = checkoutInputs[index];
+        if (!checkoutInput) return;
+
+        // Không cho chọn ngày quá khứ
+        checkinInput.min = todayStr;
+        checkoutInput.min = todayStr;
+
+        // Khi chọn checkin
+        checkinInput.addEventListener("change", function () {
+            if (!checkinInput.value) return;
+
+            const checkinDate = new Date(checkinInput.value);
+
+            // checkout = checkin + 1 ngày
+            const minCheckoutDate = new Date(checkinDate);
+            minCheckoutDate.setDate(minCheckoutDate.getDate() + 1);
+
+            const minCheckoutStr = formatDate(minCheckoutDate);
+
+            checkoutInput.min = minCheckoutStr;
+
+            // nếu checkout không hợp lệ thì reset
+           if (checkoutInput.value && checkoutInput.value < minCheckoutStr) {
+                checkoutInput.value = "";
+            }
+        });
+
+        // Khi chọn checkout
+        checkoutInput.addEventListener("change", function () {
+            if (!checkinInput.value) return;
+
+            const checkinDate = new Date(checkinInput.value);
+            const checkoutDate = new Date(checkoutInput.value);
+
+            const minCheckoutDate = new Date(checkinDate);
+            minCheckoutDate.setDate(minCheckoutDate.getDate() + 1);
+
+            if (checkoutDate < minCheckoutDate) {
+                alert("Bạn phải đặt tối thiểu 1 đêm.");
+                checkoutInput.value = formatDate(minCheckoutDate);
+            }
+        });
+    });
+});
+    // 7. nút di chuyển coi ảnh khác cảu loại phogn trong trang đặtt phogn
+document.addEventListener("DOMContentLoaded", function () {
+    const track = document.getElementById("bookingRoomGalleryTrack");
+    const prevBtn = document.getElementById("bookingRoomPrev");
+    const nextBtn = document.getElementById("bookingRoomNext");
+
+    if (!track || !prevBtn || !nextBtn) return;
+
+    const items = track.querySelectorAll(".booking-room-gallery-item");
+    let currentIndex = 0;
+
+    function updateGallery() {
+        if (!items.length) return;
+
+        const itemWidth = items[0].offsetWidth;
+        const gap = 14;
+        const visibleCount = 3;
+        const maxIndex = Math.max(0, items.length - visibleCount);
+
+        if (currentIndex < 0) currentIndex = 0;
+        if (currentIndex > maxIndex) currentIndex = maxIndex;
+
+        track.style.transform = `translateX(-${currentIndex * (itemWidth + gap)}px)`;
+
+        prevBtn.disabled = currentIndex === 0;
+        nextBtn.disabled = currentIndex === maxIndex;
+    }
+
+    nextBtn.addEventListener("click", function () {
+        currentIndex++;
+        updateGallery();
+    });
+
+    prevBtn.addEventListener("click", function () {
+        currentIndex--;
+        updateGallery();
+    });
+
+    window.addEventListener("resize", updateGallery);
+
+    updateGallery();
+});
