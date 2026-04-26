@@ -19,7 +19,8 @@ from app.dao import (
     get_hotels_by_owner,
     get_featured_hotels,
     search_hotels_advanced,
-    get_all_amenities
+    get_all_amenities,
+    get_room_booking_data
 )
 
 app = create_app()
@@ -421,6 +422,39 @@ def quan_ly_khach_san(hotel_id):
         flash("Không tìm thấy khách sạn.", "error")
         return redirect(url_for("chu_khach_san_dashboard"))
     return render_template("owner/QuanLyKhachSan.html", hotel=hotel)
+
+# =========================================================
+# DẶT PHÒNG KS
+# =========================================================
+@app.route("/dat-phong/<int:hotel_id>/<int:room_id>")
+def dat_phong(hotel_id, room_id):
+    checkin = request.args.get("checkin", "").strip()
+    checkout = request.args.get("checkout", "").strip()
+    so_nguoi_lon = request.args.get("so_nguoi_lon", "2").strip()
+    so_phong = request.args.get("so_phong", "1").strip()
+
+    if not checkin or not checkout:
+        flash("Vui lòng chọn ngày nhận phòng và ngày trả phòng.", "error")
+        return redirect(url_for("chi_tiet_khach_san", hotel_id=hotel_id))
+
+    data = get_room_booking_data(
+        hotel_id=hotel_id,
+        room_id=room_id,
+        checkin=checkin,
+        checkout=checkout,
+        so_nguoi_lon=so_nguoi_lon,
+        so_phong=so_phong
+    )
+
+    if not data:
+        flash("Không tìm thấy thông tin đặt phòng.", "error")
+        return redirect(url_for("chi_tiet_khach_san", hotel_id=hotel_id))
+
+    if data["so_phong_con_trong"] < int(so_phong):
+        flash("Loại phòng này không còn đủ số lượng phòng trống.", "error")
+        return redirect(url_for("chi_tiet_khach_san", hotel_id=hotel_id))
+
+    return render_template("DatPhong.html", data=data)
 
 if __name__ == "__main__":
     app.run(debug=True)

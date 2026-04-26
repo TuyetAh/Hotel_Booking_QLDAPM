@@ -14,7 +14,7 @@
             </p>
         </div>
 
-        <div class="detail-gallery">
+        <div class="detail-gallery {% if data.images|length < 3 %}few-images{% endif %}">
             <div class="gallery-big">
                 {% if data.images|length > 0 %}
                     <img src="{{ url_for('static', filename=data.images[0]) }}" alt="{{ data.hotel.TenKhachSan }}">
@@ -32,9 +32,13 @@
                             <div class="image-placeholder"></div>
                         {% endif %}
 
-                        {% if i == 4 %}
+                        {% if i == 4 and data.all_images|length > 0 %}
                             <button type="button" class="view-all-overlay" id="openHotelGallery">
-                                +{{ data.all_images|length }} ảnh
+                                {% if data.images|length > 5 %}
+                                    +{{ data.images|length - 5 }} ảnh
+                                {% else %}
+                                    Xem ảnh
+                                {% endif %}
                             </button>
                         {% endif %}
                     </div>
@@ -121,7 +125,9 @@
                     <label>Số phòng</label>
                     <input type="number" name="so_phong" min="1" value="{{ data.so_phong }}">
 
-                    <button type="submit">Kiểm tra phòng trống</button>
+                    <button type="submit" class="btn-check-room">
+                        Kiểm tra phòng trống
+                    </button>
                 </form>
 
                 <p class="summary-note">Bạn k bị tính phí khi kiểm tra phòng.</p>
@@ -190,7 +196,17 @@
                                     <p class="low-room-warning">Chỉ còn {{ item.so_phong_con_trong }} phòng!</p>
                                 {% endif %}
 
-                                <a href="#" class="btn-select-room">Chọn phòng</a>
+                                <a href="{{ url_for(
+                                    'dat_phong',
+                                    hotel_id=data.hotel.MaKhachSan,
+                                    room_id=item.room.MaLoaiPhong,
+                                    checkin=data.checkin,
+                                    checkout=data.checkout,
+                                    so_nguoi_lon=data.so_nguoi_lon,
+                                    so_phong=data.so_phong
+                                ) }}" class="btn-select-room">
+                                    Chọn phòng
+                                </a>
                             </div>
                         </div>
                     {% endfor %}
